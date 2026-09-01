@@ -1,0 +1,168 @@
+// Schéma de base de données pour la plateforme de streaming
+// Prisma + PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- UTILISATEURS ----------
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Un compte peut avoir plusieurs profils (comme Netflix : profil parent, enfant, etc.)
+  profiles      Profile[]
+
+  // Abonnement actif de l'utilisateur
+  subscription  Subscription?
+
+  stripeCustomerId String?  @unique
+}
+
+model Profile {
+  id            String    @id @default(uuid())
+  name          String
+  avatarUrl     String?
+  isKidsProfile Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+
+  watchHistory  WatchHistory[]
+  myList        MyListItem[]
+}
+
+// ---------- CATALOGUE ----------
+
+enum ContentType {
+  MOVIE
+  SERIES
+}
+
+model Content {
+  id            String      @id @default(uuid())
+  title         String
+  description   String
+  type          ContentType
+  posterUrl     String?
+  bannerUrl     String?
+  releaseYear   Int?
+  genres        String[]    // ex: ["Action", "Drame"]
+  ageRating     String?     // ex: "13+", "18+"
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Si c'est un film : une seule "vidéo" liée directement
+  // Si c'est une série : plusieurs saisons/épisodes
+  movie         Movie?
+  seasons       Season[]
+
+  watchHistory  WatchHistory[]
+  myList        MyListItem[]
+}
+
+model Movie {
+  id                String   @id @default(uuid())
+  content           Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId         String   @unique
+
+  // Identifiant de la vidéo sur Cloudflare Stream
+  cloudflareVideoId String
+  durationSeconds   Int?
+}
+
+model Season {
+  id            String    @id @default(uuid())
+  seasonNumber  Int
+  content       Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId     String
+
+  episodes      Episode[]
+
+  @@unique([contentId, seasonNumber])
+}
+
+model Episode {
+  id                String   @id @default(uuid())
+  episodeNumber     Int
+  title             String
+  description       String?
+  durationSeconds   Int?
+
+  // Identifiant de la vidéo sur Cloudflare Stream
+  cloudflareVideoId String
+
+  season            Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonId          String
+
+  watchHistory      WatchHistory[]
+
+  @@unique([seasonId, episodeNumber])
+}
+
+// ---------- HISTORIQUE / PROGRESSION ----------
+
+model WatchHistory {
+  id              String    @id @default(uuid())
+  profile         Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId       String
+
+  content         Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId       String
+
+  // Si c'est une série, on note l'épisode précis regardé
+  episode         Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episodeId       String?
+
+  progressSeconds Int       @default(0)
+  completed       Boolean   @default(false)
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([profileId, contentId, episodeId])
+}
+
+model MyListItem {
+  id          String    @id @default(uuid())
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId   String
+
+  content     Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId   String
+
+  addedAt     DateTime  @default(now())
+
+  @@unique([profileId, contentId])
+}
+
+// ---------- ABONNEMENTS ----------
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
+model Subscription {
+  id                    String              @id @default(uuid())
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String              @unique
+
+  stripeSubscriptionId  String?             @unique
+  stripePriceId         String?
+  status                SubscriptionStatus  @default(TRIALING)
+  currentPeriodEnd      DateTime?
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+}

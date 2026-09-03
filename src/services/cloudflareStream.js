@@ -53,7 +53,7 @@ async function createTusUpload({ fileName, fileSize, maxDurationSeconds = 21600 
     `maxDurationSeconds ${Buffer.from(String(maxDurationSeconds)).toString('base64')}`,
   ];
 
-  const response = await axios.post(BASE_URL, null, {
+  const response = await axios.post(`${BASE_URL}?direct_user=true`, null, {
     headers: {
       Authorization: `Bearer ${API_TOKEN}`,
       'Tus-Resumable': '1.0.0',

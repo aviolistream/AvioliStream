@@ -51,6 +51,7 @@ async function createTusUpload({ fileName, fileSize, maxDurationSeconds = 21600 
   const metadataParts = [
     `name ${Buffer.from(fileName || 'video').toString('base64')}`,
     `maxDurationSeconds ${Buffer.from(String(maxDurationSeconds)).toString('base64')}`,
+    `allowedorigins ${Buffer.from('*').toString('base64')}`,
   ];
 
   const response = await axios.post(`${BASE_URL}?direct_user=true`, null, {
